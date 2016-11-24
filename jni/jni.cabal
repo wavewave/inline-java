@@ -11,7 +11,7 @@ copyright:           2015-2016 EURL Tweag.
 category:            FFI, JVM, Java
 build-type:          Simple
 cabal-version:       >=1.10
-extra-source-files:  README.md
+extra-source-files:  README.md AUTHORS.md
 extra-tmp-files:
   src/Foreign/JNI.c
 
@@ -20,11 +20,20 @@ source-repository head
   location: https://github.com/tweag/inline-java
   subdir: jni
 
+flag jli
+  description: Use libjli (Java Legacy Interface) instead of libjvm
+  default: False
+
 library
   hs-source-dirs: src
   c-sources: src/Foreign/JNI.c
   cc-options: -std=c11
-  extra-libraries: jvm
+  build-tools: cpphs
+  ghc-options: -optP --cpp -pgmP cpphs
+  if flag(jli)
+    extra-libraries: jli
+  else
+    extra-libraries: jvm
   exposed-modules:
     Foreign.JNI
     Foreign.JNI.Types

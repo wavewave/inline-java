@@ -1,0 +1,15 @@
+resolver: lts-7.18
+compiler: ghc-8.0.2
+compiler-check: match-exact
+install-ghc: true
+
+packages:
+- .
+- ../jni
+
+extra-deps:
+- thread-local-storage-0.1.0.4
+
+nix:
+  enable: true
+  shell-file: shell.nix

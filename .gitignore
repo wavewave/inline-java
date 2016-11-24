@@ -1,2 +1,6 @@
 .stack-work
 jni/src/Foreign/JNI.c
+dist/
+dist-newstyle/
+result
+id_rsa

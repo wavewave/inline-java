@@ -1,0 +1,19 @@
+os:
+- linux
+language: generic
+sudo: false
+branches:
+  only:
+  - leapyear-patchset
+env:
+  global:
+  - CASHER_TIME_OUT=3600
+before_install:
+- openssl aes-256-cbc -K $encrypted_02288c648d1c_key -iv $encrypted_02288c648d1c_iv -in leapyear-builder-us-west-1.pem.enc -out leapyear-builder-us-west-1.pem -d
+- chmod 0600 leapyear-builder-us-west-1.pem
+script:
+- "./remote_build.sh leapyear-builder-us-west-1.pem administrator@207.254.60.203" # MacOS 10.12 (Sierra)
+- "./remote_build.sh leapyear-builder-us-west-1.pem ec2-user@52.52.174.72"
+- "./remote_build.sh leapyear-builder-us-west-1.pem administrator@207.254.73.194" # MacOS 10.11 (El Capitan)
+notifications:
+  slack: leapyear:o4w7lKexDuDCzmPSayJuQg9m
