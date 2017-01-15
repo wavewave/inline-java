@@ -49,6 +49,7 @@
 
 module Language.Java
   ( module Foreign.JNI.Types
+  , defaultConfig
   , withJVM
   , classOf
   , new

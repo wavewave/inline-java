@@ -1,8 +1,8 @@
 module Main where
 
-import Language.Java (withJVM)
+import Language.Java (defaultConfig, withJVM)
 import qualified Spec
 import Test.Hspec
 
 main :: IO ()
-main = withJVM [] $ hspec Spec.spec
+main = withJVM defaultConfig $ hspec Spec.spec

@@ -21,6 +21,8 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -30,7 +32,12 @@
 module Foreign.JNI
   ( -- * JNI functions
     -- ** VM creation
-    withJVM
+    Config
+  , defaultConfig
+  , withJVM
+    -- ** Configuration settings
+  , configJvmOptions
+  , configGcTorture
     -- ** Class loading
   , defineClass
   , JNINativeMethod(..)
@@ -166,7 +173,7 @@ import qualified Data.ByteString as BS
 import Data.Monoid ((<>))
 import Data.Typeable (Typeable)
 import Data.TLS.PThread
-import Foreign.C (CChar)
+import Foreign.C (CChar, CInt)
 import Foreign.JNI.NativeMethod
 import Foreign.JNI.Types
 import qualified Foreign.JNI.String as JNI
@@ -252,23 +259,57 @@ useAsCStrings :: [ByteString] -> ([Ptr CChar] -> IO a) -> IO a
 useAsCStrings strs m =
   foldr (\str k cstrs -> BS.useAsCString str $ \cstr -> k (cstr:cstrs)) m strs []
 
+data Config = Config
+  { -- | Command-line arguments for the JVM.
+    _configJvmOptions :: [ByteString]
+    -- | If set to 'True', the garbage collector will run before every method
+    -- call through the JNI. Calling this function will make your program very
+    -- slow. It should be used for debugging purposes only. It is useful to
+    -- detect memory pinning issues.
+  , _configGcTorture :: Bool
+  }
+
+type Lens' s a = forall f. Functor f => (a -> f a) -> s -> f s
+
+configJvmOptions :: Lens' Config [ByteString]
+configJvmOptions f Config{..} =
+    (\_configJvmOptions -> Config{..}) <$> f _configJvmOptions
+
+configGcTorture :: Lens' Config Bool
+configGcTorture f Config{..} =
+    (\_configGcTorture -> Config{..}) <$> f _configGcTorture
+
+defaultConfig :: Config
+defaultConfig = Config
+    { _configJvmOptions = []
+    , _configGcTorture = False
+    }
+
+C.verbatim "static int foreign_jni_gctorture;"
+
 -- | Create a new JVM, with the given arguments. /Can only be called once/. Best
 -- practice: use it to wrap your @main@ function.
-withJVM :: [ByteString] -> IO a -> IO a
-withJVM options action =
+withJVM :: Config -> IO a -> IO a
+withJVM Config{..} action =
     bracket ini fini (const action)
   where
     ini = do
-      useAsCStrings options $ \cstrs -> do
+      useAsCStrings _configJvmOptions $ \cstrs -> do
         withArray cstrs $ \(coptions :: Ptr (Ptr CChar)) -> do
-          let n = fromIntegral (length cstrs) :: C.CInt
+          let n = fromIntegral (length cstrs) :: CInt
+              torture = fromIntegral (fromEnum _configGcTorture) :: CInt
           [C.block| JavaVM * {
             JavaVM *jvm;
             JNIEnv *env;
             JavaVMInitArgs vm_args;
-            JavaVMOption *options = malloc(sizeof(JavaVMOption) * $(int n));
+            JavaVMOption *options;
+
+            options = malloc(sizeof(JavaVMOption) * $(int n));
             for(int i = 0; i < $(int n); i++)
                     options[i].optionString = $(char **coptions)[i];
+
+            foreign_jni_gctorture = $(int torture);
+
             vm_args.version = JNI_VERSION_1_6;
             vm_args.nOptions = $(int n);
             vm_args.options = options;
@@ -500,6 +541,17 @@ deleteGlobalRef (coerce -> upcast -> obj) = withJNIEnv $ \env ->
       (*$(JNIEnv *env))->DeleteGlobalRef($(JNIEnv *env),
                                          $(jobject obj)); } |]
 
+C.verbatim $ unlines
+  [ "static void foreign_jni_garbage_collect(JNIEnv *env)"
+  , "{"
+  , "    static jclass systemClass;"
+  , "    static jmethodID gcID;"
+  , "    systemClass = systemClass ? systemClass : (*env)->FindClass(env, \"java/lang/System\");"
+  , "    gcID = gcID ? gcID : (*env)->GetStaticMethodID(env, systemClass, \"gc\", \"()V\");"
+  , "    (*env)->CallStaticVoidMethod(env, systemClass, gcID);"
+  , "}"
+  ]
+
 -- Modern CPP does have ## for concatenating strings, but we use the hacky /**/
 -- comment syntax for string concatenation. This is because GHC passes
 -- the -traditional flag to the preprocessor by default, which turns off several
@@ -510,11 +562,12 @@ call/**/name/**/Method :: Coercible o (J a) => o -> JMethodID -> [JValue] -> IO 
 call/**/name/**/Method (coerce -> upcast -> obj) method args = withJNIEnv $ \env -> \
     throwIfException env $ \
     withArray args $ \cargs -> \
-    [C.exp| c_rettype { \
-      (*$(JNIEnv *env))->Call/**/name/**/MethodA($(JNIEnv *env), \
-                                               $(jobject obj), \
-                                               $(jmethodID method), \
-                                               $(jvalue *cargs)) } |]
+    [C.block| c_rettype { \
+      if(foreign_jni_gctorture) foreign_jni_garbage_collect($(JNIEnv *env)); \
+      return (*$(JNIEnv *env))->Call/**/name/**/MethodA($(JNIEnv *env), \
+                                                        $(jobject obj), \
+                                                        $(jmethodID method), \
+                                                        $(jvalue *cargs)); } |]
 
 CALL_METHOD(Void, (), void)
 CALL_METHOD(Object, JObject, jobject)
@@ -535,11 +588,12 @@ callStatic/**/name/**/Method :: JClass -> JMethodID -> [JValue] -> IO hs_rettype
 callStatic/**/name/**/Method cls method args = withJNIEnv $ \env -> \
     throwIfException env $ \
     withArray args $ \cargs -> \
-    [C.exp| c_rettype { \
-      (*$(JNIEnv *env))->CallStatic/**/name/**/MethodA($(JNIEnv *env), \
-                                                       $(jclass cls), \
-                                                       $(jmethodID method), \
-                                                       $(jvalue *cargs)) } |]
+    [C.block| c_rettype { \
+      if(foreign_jni_gctorture) foreign_jni_garbage_collect($(JNIEnv *env)); \
+      return (*$(JNIEnv *env))->CallStatic/**/name/**/MethodA($(JNIEnv *env), \
+                                                              $(jclass cls), \
+                                                              $(jmethodID method), \
+                                                              $(jvalue *cargs)); } |]
 
 CALL_STATIC_METHOD(Void, (), void)
 CALL_STATIC_METHOD(Object, JObject, jobject)
