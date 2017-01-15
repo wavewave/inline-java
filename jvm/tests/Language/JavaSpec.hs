@@ -9,6 +9,7 @@ module Language.JavaSpec where
 import Data.Int
 import qualified Data.Text as Text
 import Data.Text (Text)
+import Foreign.JNI (deleteLocalRef)
 import Language.Java
 import Test.Hspec
 
@@ -56,3 +57,10 @@ spec = do
           `shouldReturn` (maxBound :: Int64)
         callStatic (sing :: Sing "java.lang.Long") "parseLong" [coerce minlong]
           `shouldReturn` (minBound :: Int64)
+    describe "reify" $ do
+      it "protects objects from garbage collection" $ do
+        zero <- reflect ("foo" :: Text)
+        zero' :: J ('Class "java.lang.Object") <- reify (upcast zero)
+        deleteLocalRef zero
+        _ :: Bool <- call zero' "equals" [coerce (upcast zero')]
+        return ()

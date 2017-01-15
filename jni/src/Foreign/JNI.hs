@@ -55,6 +55,7 @@ module Foreign.JNI
     -- ** Reference manipulation
   , newGlobalRef
   , deleteGlobalRef
+  , deleteLocalRef
     -- ** Field accessor functions
     -- *** Get fields
   , getObjectField
@@ -540,6 +541,12 @@ deleteGlobalRef (coerce -> upcast -> obj) = withJNIEnv $ \env ->
     [CU.block| void {
       (*$(JNIEnv *env))->DeleteGlobalRef($(JNIEnv *env),
                                          $(jobject obj)); } |]
+
+deleteLocalRef :: Coercible o (J ty) => o -> IO ()
+deleteLocalRef (coerce -> upcast -> obj) = withJNIEnv $ \env ->
+    [CU.block| void {
+      (*$(JNIEnv *env))->DeleteLocalRef($(JNIEnv *env),
+                                        $(jobject obj)); } |]
 
 C.verbatim $ unlines
   [ "static void foreign_jni_garbage_collect(JNIEnv *env)"
