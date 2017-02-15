@@ -1,6 +1,6 @@
 let
   pkgs = import ./nixpkgs.nix;
-  
+
   hsPkgs =
     pkgs.haskell // {
       packages = pkgs.haskell.packages // {

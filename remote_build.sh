@@ -1,6 +1,6 @@
 #!/bin/sh
 
-set -x 
+set -x
 
 KEYFILE="$1"
 USER_AT_IP="$2"
