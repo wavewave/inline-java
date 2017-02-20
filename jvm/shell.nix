@@ -25,7 +25,7 @@ let
     stdenv.mkDerivation (args // {
 
       LD_LIBRARY_PATH =
-        args.LD_LIBRARY_PATH + ":" + makeLibraryPath buildInputs;
+        (args.LD_LIBRARY_PATH or "") + ":" + makeLibraryPath buildInputs;
 
       buildInputs =
         buildInputs ++ [
@@ -67,13 +67,12 @@ let
       '';
     });
 in
-
-  leapyearBuildStackProject {
-    name = "jvm-0.2.3.0";
+  leapyearBuildStackProject rec {
     version = "0.2.3.0";
+    name = "jvm-${version}";
     inherit ghc;
     # src = ./.;
     buildInputs = [ jdk ];
-    extraArgs = ["--extra-lib-dirs=${jvmlibdir}"];
+    # extraArgs = ["--extra-lib-dirs=${jvmlibdir}"];
     LD_LIBRARY_PATH = jvmlibdir;
   }

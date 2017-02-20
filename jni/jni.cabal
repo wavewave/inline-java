@@ -20,20 +20,12 @@ source-repository head
   location: https://github.com/tweag/inline-java
   subdir: jni
 
-flag jli
-  description: Use libjli (Java Legacy Interface) instead of libjvm
-  default: False
-
 library
   hs-source-dirs: src
   c-sources: src/Foreign/JNI.c
   cc-options: -std=c11
   build-tools: cpphs
   ghc-options: -optP --cpp -pgmP cpphs
-  if flag(jli)
-    extra-libraries: jli
-  else
-    extra-libraries: jvm
   exposed-modules:
     Foreign.JNI
     Foreign.JNI.Types
@@ -50,3 +42,7 @@ library
     thread-local-storage >=0.1
   build-tools: cpphs
   default-language: Haskell2010
+  if os(darwin)
+    extra-libraries: jli
+  else
+    extra-libraries: jvm

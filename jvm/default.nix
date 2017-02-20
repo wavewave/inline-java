@@ -15,6 +15,4 @@ let
       };
     };
 in
-  hsPkgs.packages.ghc802.callPackage ./jvm.nix {
-    jdk = pkgs.openjdk8;
-  }
+  hsPkgs.packages.ghc802.callPackage ./jvm.nix {}

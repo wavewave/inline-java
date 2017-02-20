@@ -17,8 +17,8 @@ mkDerivation {
   src = ./.;
   libraryHaskellDepends = [
     base bytestring containers inline-c singletons thread-local-storage choice
+    jdk
   ];
-  librarySystemDepends = [ jdk ];
   libraryToolDepends = [ cpphs ];
 
   # We need this because libjli.dylib is in a nonstandard location relative
@@ -30,7 +30,6 @@ mkDerivation {
   configureFlags = [
     "--extra-lib-dirs=${jvmlibdir}"
     "--ghc-option=-optl=-Wl,-rpath,${jvmlibdir}"
-    (if stdenv.isDarwin then "-fjli" else "-f-jli")
   ];
 
   # We need this because the _hsc_make binaries can't otherwise find
@@ -44,12 +43,12 @@ mkDerivation {
   # libraries, and our libjli.dylib is not in the restricted set, in some
   # circumstances.
   #
-  # preFixup = if stdenv.isDarwin then ''
-  #   install_name_tool -change \
-  #     @rpath/libjli.dylib \
-  #     ${jvmlibdir}/libjli.dylib \
-  #     $out/lib/ghc-8.0.*/x86_64-osx-ghc-8.0.*/libHSjni-*.dylib
-  # '' else "";
+#  preFixup = if stdenv.isDarwin then ''
+#    install_name_tool -change \
+#      @rpath/libjli.dylib \
+#      ${jvmlibdir}/libjli.dylib \
+#      $out/lib/ghc-8.*/x86_64-osx-ghc-8.*/libHSjni-*.dylib
+#  '' else "";
 
   homepage = "https://github.com/tweag/inline-java/tree/master/jni#readme";
   description = "Complete JNI raw bindings";
