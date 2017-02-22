@@ -1,4 +1,4 @@
-{ nixpkgs ? import ./nixpkgs.nix
+{ nixpkgs ? import ../nix/nixpkgs.nix
 , ghc ? nixpkgs.ghc
 }:
 
