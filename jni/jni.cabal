@@ -25,7 +25,7 @@ library
   c-sources: src/Foreign/JNI.c
   cc-options: -std=c11
   build-tools: cpphs
-  ghc-options: -optP --cpp -pgmP cpphs
+  ghc-options: -Wall -Werror -O2 -optP --cpp -pgmP cpphs
   if os(darwin)
     extra-libraries: jli
   else
