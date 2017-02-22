@@ -15,56 +15,32 @@ let
       else "${jdk}/lib/openjdk/jre/lib/amd64/server";
 
   leapyearBuildStackProject =
-    { buildInputs ? []
+    { ghc
+    , buildInputs ? []
     , extraArgs ? []
     , LD_LIBRARY_PATH ? ""
-    , ghc
     , ...
     }@args:
 
     stdenv.mkDerivation (args // {
-
-      LD_LIBRARY_PATH =
-        (args.LD_LIBRARY_PATH or "") + ":" + makeLibraryPath buildInputs;
-
-      buildInputs =
-        buildInputs ++ [
-          nixpkgs.stack
-          nixpkgs.nix
-          nixpkgs.pkgconfig
-          nixpkgs.libiconv
-          ghc
-        ] ++ stdenv.lib.optional stdenv.isLinux nixpkgs.glibcLocales;
+      buildInputs = args.buildInputs ++ [
+        nixpkgs.stack
+        nixpkgs.nix
+        nixpkgs.pkgconfig
+        nixpkgs.libiconv
+        ghc
+      ] ++ optional stdenv.isLinux nixpkgs.glibcLocales;
 
       STACK_PLATFORM_VARIANT="nix";
       STACK_IN_NIX_SHELL=1;
       STACK_IN_NIX_EXTRA_ARGS =
         concatMap (pkg: ["--extra-lib-dirs=${getLib pkg}/lib"
                          "--extra-include-dirs=${getDev pkg}/include"
-                        ]) buildInputs
+                        ])
+                  args.buildInputs
         ++ extraArgs;
 
       preferLocalBuild = true;
-
-      configurePhase = ''
-        export STACK_ROOT=$NIX_BUILD_TOP/.stack
-        stack setup
-      '';
-
-      buildPhase = ''
-        stack build
-      '';
-
-      checkPhase = ''
-        runHook preCheck
-        stack test
-        runHook postCheck
-      '';
-
-      installPhase = ''
-        mkdir -p $out/bin
-        stack --local-bin-path=$out/bin build --copy-bins
-      '';
     });
 in
   leapyearBuildStackProject rec {
@@ -73,6 +49,6 @@ in
     inherit ghc;
     # src = ./.;
     buildInputs = [ jdk ];
-    # extraArgs = ["--extra-lib-dirs=${jvmlibdir}"];
+    extraArgs = ["--extra-lib-dirs=${jvmlibdir}"];
     LD_LIBRARY_PATH = jvmlibdir;
   }

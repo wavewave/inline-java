@@ -15,37 +15,40 @@ let
       else "${jdk}/lib/openjdk/jre/lib/amd64/server";
 
   leapyearBuildStackProject =
-    { extraArgs ? []
+    { ghc
+    , buildInputs ? []
+    , extraArgs ? []
     , LD_LIBRARY_PATH ? ""
-    , ghc
     , ...
     }@args:
 
-    stdenv.mkDerivation (args // rec {
-      buildInputs = [
+    stdenv.mkDerivation (args // {
+      buildInputs = args.buildInputs ++ [
         nixpkgs.stack
         nixpkgs.nix
         nixpkgs.pkgconfig
         nixpkgs.libiconv
         ghc
-      ] ++ stdenv.lib.optional stdenv.isLinux nixpkgs.glibcLocales;
+      ] ++ optional stdenv.isLinux nixpkgs.glibcLocales;
 
       STACK_PLATFORM_VARIANT="nix";
       STACK_IN_NIX_SHELL=1;
       STACK_IN_NIX_EXTRA_ARGS =
         concatMap (pkg: ["--extra-lib-dirs=${getLib pkg}/lib"
                          "--extra-include-dirs=${getDev pkg}/include"
-                        ]) buildInputs
+                        ])
+                  args.buildInputs
         ++ extraArgs;
+
+      preferLocalBuild = true;
     });
 in
-
   leapyearBuildStackProject rec {
     version = "0.2.3.0";
     name = "jni-${version}";
     inherit ghc;
-    src = ./.;
+    # src = ./.;
     buildInputs = [ jdk ];
-    # extraArgs = ["--extra-lib-dirs=${jvmlibdir}"];
+    extraArgs = ["--extra-lib-dirs=${jvmlibdir}"];
     LD_LIBRARY_PATH = jvmlibdir;
   }

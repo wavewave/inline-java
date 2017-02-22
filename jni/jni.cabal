@@ -1,5 +1,5 @@
 name:                jni
-version:             0.2.3
+version:             0.2.3.0
 synopsis:            Complete JNI raw bindings.
 description:         Please see README.md.
 homepage:            https://github.com/tweag/inline-java/tree/master/jni#readme
@@ -26,6 +26,10 @@ library
   cc-options: -std=c11
   build-tools: cpphs
   ghc-options: -optP --cpp -pgmP cpphs
+  if os(darwin)
+    extra-libraries: jli
+  else
+    extra-libraries: jvm
   exposed-modules:
     Foreign.JNI
     Foreign.JNI.Types
@@ -42,7 +46,3 @@ library
     thread-local-storage >=0.1
   build-tools: cpphs
   default-language: Haskell2010
-  if os(darwin)
-    extra-libraries: jli
-  else
-    extra-libraries: jvm
