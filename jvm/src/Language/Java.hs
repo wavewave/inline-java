@@ -224,10 +224,10 @@ newArray sz = do
     SPrim "float"   -> unsafeCast <$> newFloatArray   sz
     SPrim "double"  -> unsafeCast <$> newDoubleArray  sz
     SVoid           -> error "newArray of void"
-    SClass cls      -> unsafeCast <$>
-      newObjectArray sz klass
-
+    SClass cls      -> unsafeCast <$> newObjectArray sz klass
       where klass = unsafeDupablePerformIO $ findClass (JNI.fromChars cls) >>= newGlobalRef
+    _               -> error "unhandled Sing in Language.Java"
+
 
 -- | The Swiss Army knife for calling Java methods. Give it an object or
 -- any data type coercible to one, the name of a method, and a list of
