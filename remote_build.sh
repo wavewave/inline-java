@@ -66,7 +66,8 @@ if [ 0 -eq $? ]; then
            ) &&
            ( cd jvm && ./clean.sh && nix-build
            ) &&
-           ( ./clean.sh && nix-build )
+           ( ./clean.sh && nix-build
+           ) &&
            ( cd jni &&
              nix-shell --run \"./build.sh --fast --test --only-snapshot\" &&
              nix-shell --run \"./build.sh --fast --test\"
@@ -74,6 +75,9 @@ if [ 0 -eq $? ]; then
            ( cd jvm &&
              nix-shell --run \"./build.sh --fast --test --only-snapshot\" &&
              nix-shell --run \"./build.sh --fast --test\"
-           )"
+           ) &&
+           nix-shell --run \"./build.sh --fast --test --only-snapshot\" &&
+           nix-shell --run \"./build.sh --fast --test\"
+          "
    fi
 fi
