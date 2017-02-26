@@ -20,16 +20,20 @@ source-repository head
   location: https://github.com/tweag/inline-java
   subdir: jni
 
+flag use-libjvm
+  default: False
+  description: Use libjli.dylib or libjvm.dylib for JNI_CreateJavaVM invocation.
+
 library
   hs-source-dirs: src
   c-sources: src/Foreign/JNI.c
   cc-options: -std=c11
   build-tools: cpphs
   ghc-options: -Wall -Werror -O2 -optP --cpp -pgmP cpphs
-  if os(darwin)
-    extra-libraries: jli
-  else
+  if flag(use-libjvm) || ! os(darwin)
     extra-libraries: jvm
+  else
+    extra-libraries: jli
   exposed-modules:
     Foreign.JNI
     Foreign.JNI.Types
