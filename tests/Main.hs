@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 import Language.Java (withJVM)
@@ -5,4 +6,4 @@ import qualified Spec
 import Test.Hspec
 
 main :: IO ()
-main = withJVM [] $ hspec Spec.spec
+main = withJVM ["-Xmx100m", "-Xcheck:jni"] $ hspec Spec.spec

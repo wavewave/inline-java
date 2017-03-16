@@ -67,5 +67,6 @@ test-suite spec
     hspec,
     inline-java,
     singletons,
-    text
+    text,
+    vector
   default-language: Haskell2010

@@ -1,14 +1,48 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Language.Java.InlineSpec where
 
+import qualified Data.Coerce as Coerce
 import Data.Int
-import Foreign.JNI.Types (JObject)
+import qualified Data.Vector.Storable as VS
+import Foreign (Ptr, FunPtr)
+import Foreign.ForeignPtr (newForeignPtr_)
+import Foreign.ForeignPtr.Unsafe (unsafeForeignPtrToPtr)
+import Foreign.JNI as JNI
+import Foreign.JNI.Types
+import GHC.Stats
 import Language.Java
 import Language.Java.Inline
+import Data.Singletons (SomeSing(..))
 import Test.Hspec
+
+import Control.Monad
+import Data.IORef
+import System.IO.Unsafe
+import System.Mem
+
+foreign export ccall "hsApply" hsApply
+  :: JNIEnv -> Ptr JObject -> Ptr JIntArray -> IO (Ptr JIntArray)
+foreign import ccall "&hsApply" hsApplyPtr
+  :: FunPtr (JNIEnv -> Ptr JObject -> Ptr JIntArray -> IO (Ptr JIntArray))
+
+countRef :: IORef Int
+countRef = unsafePerformIO $ newIORef 0
+{-# NOINLINE countRef #-}
+
+hsApply :: JNIEnv -> Ptr JObject -> Ptr JIntArray -> IO (Ptr JIntArray)
+hsApply _ _ ptr = do
+    jarg <- J <$> newForeignPtr_ ptr
+    v <- reify (unsafeCast jarg) :: IO (VS.Vector Int32)
+    x <- atomicModifyIORef' countRef (\x -> (x+1, x))
+    when (mod x 1000000 == 0) $ do
+      performMajorGC
+      getGCStats >>= print
+    unsafeForeignPtrToPtr <$> Coerce.coerce <$> reflect v
 
 spec :: Spec
 spec = do
@@ -42,3 +76,41 @@ spec = do
 
       it "Supports multiple anonymous classes" $ do
         ([java| new Object() {}.equals(new Object() {}) |] >>= reify) `shouldReturn` False
+
+      it "doesn't leak" $ (do
+        jf <- [java|
+            new java.util.function.Function<int[],int[]>() {
+              @Override
+              public int[] apply(int[] d) { return hsApply(d); }
+              private native int[] hsApply(int[] d);
+            }
+          |] :: IO (J ('Class "java.util.function.Function"))
+
+        klass <- JNI.getObjectClass jf
+        JNI.registerNatives klass
+          [ JNI.JNINativeMethod
+              "hsApply"
+              (methodSignature [SomeSing (sing :: Sing ('Array ('Prim "int")))]
+                               (sing :: Sing ('Array ('Prim "int")))
+              )
+              hsApplyPtr
+          ]
+
+        r <- [java| {
+           int[] prev = new int[100];
+           Runtime r = Runtime.getRuntime();
+           for(int i=0;i<100000000;i++) {
+             prev = (int[])$jf.apply(prev);
+             if (i % 1000000 == 0) {
+               try { Thread.sleep(1000); } catch(Exception ex) {}
+               System.gc();
+               long live = r.totalMemory() - r.freeMemory();
+               System.out.println("live bytes: " + live);
+               System.out.println("heap size: " + r.totalMemory());
+             }
+           };
+           return 0;
+           }
+          |] >>= reify :: IO Int32
+        return r
+          ) `shouldReturn` 0
