@@ -10,7 +10,10 @@ jobs:
         key: inline-java-stack-dependencies
     - run:
         name: build dependencies
-        command: stack --no-terminal build --only-dependencies --prefetch --test --bench
+        command: |
+          # XXX Workaround https://github.com/commercialhaskell/stack/issues/595
+          stack --no-terminal build alex happy
+          stack --no-terminal build --only-dependencies --prefetch --test --bench
     - save_cache:
         key: inline-java-stack-dependencies
         paths:
