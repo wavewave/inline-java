@@ -178,7 +178,7 @@ unliftJType (TH.AppT (TH.PromotedT nm) (TH.LitT (TH.StrTyLit sym)))
   | nm == 'Prim = return $ SomeSing $ SPrim (fromString sym)
 unliftJType (TH.AppT (TH.PromotedT nm) ty)
   | nm == 'Array = unliftJType ty >>= \case SomeSing jty -> return $ SomeSing (SArray jty)
-unliftJType (TH.AppT (TH.AppT (TH.ConT nm) ty) tys)
+unliftJType (TH.AppT (TH.AppT (TH.PromotedT nm) ty) tys)
   | nm == 'Generic = do
     SomeSing jty <- unliftJType ty
     SomeSing jtys <- unliftJTypes tys
