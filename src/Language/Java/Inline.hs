@@ -114,6 +114,102 @@ java = QuasiQuoter
     , quoteDec  = error "Language.Java.Inline: quoteDec"
     }
 
+antis :: Java.Block -> [String]
+antis = nub . everything (++) (mkQ [] (\case Java.Name (Java.Ident ('$':av):_) -> [av]; _ -> []))
+
+toJavaType :: Sing (a :: JType) -> Java.Type
+toJavaType ty = case Java.parser Java.ttype (pretty ty) of
+    Left err -> error $ "toJavaType: " ++ show err
+    Right x -> x
+  where
+    pretty :: Sing (a :: JType) -> String
+    pretty (SClass sym) = sym
+    pretty (SIface sym) = sym
+    pretty (SPrim sym) = sym
+    pretty (SArray ty1) = pretty ty1 ++ "[]"
+    pretty (SGeneric ty1 tys) =
+        pretty ty1 ++ "<" ++ intercalate "," (smap pretty tys) ++ ">"
+      where
+        smap :: (forall x. Sing (x :: JType) -> b) -> Sing (a :: [JType]) -> [b]
+        smap _ SNil = []
+        smap f (SCons x xs) = f x : smap f xs
+    pretty SVoid = "void"
+
+abstract
+  :: Java.Ident
+  -> Maybe Java.Type
+  -> [(Java.Ident, Java.Type)]
+  -> Java.Block
+  -> Java.MemberDecl
+abstract mname retty vtys block =
+    Java.MethodDecl [Java.Public, Java.Static] [] retty mname params [] body
+  where
+    body = Java.MethodBody (Just block)
+    params = [ Java.FormalParam [Java.Final] ty False (Java.VarId v)
+             | (v, ty) <- vtys
+             ]
+
+-- | Decode a TH 'Type' into a 'JType'. So named because it's morally the
+-- inverse of 'Language.Haskell.TH.Syntax.lift'.
+unliftJType :: TH.Type -> Q (SomeSing JType)
+unliftJType (TH.AppT (TH.PromotedT nm) (TH.LitT (TH.StrTyLit sym)))
+  | nm == 'Class = return $ SomeSing $ SClass (fromString sym)
+  | nm == 'Iface = return $ SomeSing $ SIface (fromString sym)
+  | nm == 'Prim = return $ SomeSing $ SPrim (fromString sym)
+unliftJType (TH.AppT (TH.PromotedT nm) ty)
+  | nm == 'Array = unliftJType ty >>= \case SomeSing jty -> return $ SomeSing (SArray jty)
+unliftJType (TH.AppT (TH.AppT (TH.PromotedT nm) ty) tys)
+  | nm == 'Generic = do
+    SomeSing jty <- unliftJType ty
+    SomeSing jtys <- unliftJTypes tys
+    return $ SomeSing $ SGeneric jty jtys
+unliftJType (TH.PromotedT nm)
+  | nm == 'Void = return $ SomeSing SVoid
+-- Sometimes TH uses ConT for PromotedT. Pretend it's always PromotedT.
+unliftJType (TH.AppT (TH.ConT nm) ty) =
+    unliftJType $ TH.AppT (TH.PromotedT nm) ty
+unliftJType (TH.AppT (TH.AppT (TH.ConT nm) ty1) ty2) =
+    unliftJType $ TH.AppT (TH.AppT (TH.PromotedT nm) ty1) ty2
+unliftJType ty = fail $ "unliftJType: cannot unlift " ++ show (TH.ppr ty)
+
+unliftJTypes :: TH.Type -> Q (SomeSing [JType])
+unliftJTypes TH.PromotedNilT = return $ SomeSing SNil
+unliftJTypes (TH.AppT (TH.AppT TH.PromotedConsT ty) tys) = do
+    SomeSing jty <- unliftJType ty
+    SomeSing jtys <- unliftJTypes tys
+    return $ SomeSing $ SCons jty jtys
+unliftJTypes (TH.SigT ty _) = unliftJTypes ty
+unliftJTypes ty = fail $ "unliftJTypes: cannot unlift " ++ show (TH.ppr ty)
+
+getValueName :: String -> Q TH.Name
+getValueName v =
+    TH.lookupValueName v >>= \case
+      Nothing -> fail $ "Identifier not in scope: " ++ v
+      Just name -> return name
+
+makeCompilationUnit
+  :: Java.Name
+  -> [Java.ImportDecl]
+  -> Java.ClassDecl
+  -> Java.CompilationUnit
+makeCompilationUnit pkgname importDecls cls =
+    Java.CompilationUnit
+      (Just (Java.PackageDecl pkgname)) importDecls [Java.ClassTypeDecl cls]
+
+makeClass :: Java.Ident -> [Java.MemberDecl] -> Java.ClassDecl
+makeClass cname methods =
+  Java.ClassDecl
+    []
+    cname
+    []
+    Nothing
+    []
+    (Java.ClassBody
+       (map Java.MemberDecl methods))
+
+emit :: FilePath -> Java.CompilationUnit -> IO ()
+emit file cdecl = writeFile file (Java.prettyPrint cdecl)
+
 -- | Private newtype to key the TH state.
 newtype IJState = IJState { methodCount :: Integer }
 
